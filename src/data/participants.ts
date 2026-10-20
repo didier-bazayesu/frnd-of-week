@@ -253,7 +253,5 @@ export const participants: Participant[] = [
     lastName: "Delphine",
     year: "Y3",
     phone: "0798644099",
-    adminNote:
-      "Phone number is missing. Participant cannot be reached until a valid number is provided.",
   } as Participant),
 ];
