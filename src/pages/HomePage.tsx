@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Sparkles, Users, Calendar, ArrowRight } from 'lucide-react';
 import ParticipantForm from '../components/ParticipantForm';
 import Footer from '../components/Footer';
 import { findParticipant } from '../services/participantStorage';
+import { syncFromCloudToLocal } from '../services/jsonbin';
 
 // Fixed floating heart configurations for deterministic animation
 const HEARTS = [
@@ -30,6 +31,11 @@ export default function HomePage() {
   const navigate = useNavigate();
   const [globalError, setGlobalError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sync latest cloud state in background on page load
+  useEffect(() => {
+    syncFromCloudToLocal().catch(() => {});
+  }, []);
 
   function handleSearch(firstName: string, lastName: string, phone: string) {
     setIsLoading(true);
