@@ -1,14 +1,15 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Search, Filter, AlertTriangle, CheckCircle, Pencil } from 'lucide-react';
 import type { Participant } from '../../types/participant';
 
 interface ParticipantsTableProps {
   participants: Participant[];
+  onEdit?: (participant: Participant) => void;
 }
 
 const YEAR_OPTIONS = ['All', 'Y1', 'Y2', 'Y3', 'Btech'];
 
-export default function ParticipantsTable({ participants }: ParticipantsTableProps) {
+export default function ParticipantsTable({ participants, onEdit }: ParticipantsTableProps) {
   const [query, setQuery] = useState('');
   const [yearFilter, setYearFilter] = useState('All');
 
@@ -62,12 +63,13 @@ export default function ParticipantsTable({ participants }: ParticipantsTablePro
               <th className="px-4 py-3 text-left font-semibold">Year</th>
               <th className="px-4 py-3 text-left font-semibold">Phone</th>
               <th className="px-4 py-3 text-center font-semibold">Status</th>
+              {onEdit && <th className="px-4 py-3 text-right font-semibold">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-purple-50 bg-white">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-purple-300">
+                <td colSpan={onEdit ? 5 : 4} className="px-4 py-8 text-center text-purple-300">
                   No participants match your search.
                 </td>
               </tr>
@@ -101,6 +103,19 @@ export default function ParticipantsTable({ participants }: ParticipantsTablePro
                       </span>
                     )}
                   </td>
+                  {onEdit && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(p)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+                        title="Edit participant"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
