@@ -9,6 +9,7 @@ import { ensureMatchesForCurrentWeek, getMatchForParticipant } from '../services
 import { friendshipMessages } from '../data/friendshipMessages';
 import { messageIndexForParticipant } from '../utils/matching';
 import { getCurrentWeekId } from '../utils/week';
+import { syncFromCloudToLocal } from '../services/jsonbin';
 import type { Participant } from '../types/participant';
 
 // Simple confetti pieces — deterministic positions
@@ -34,13 +35,17 @@ export default function MatchPage() {
   const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    if (!participantId) {
-      setErrorMsg('No participant specified.');
-      setStatus('error');
-      return;
-    }
+    async function loadMatch() {
+      if (!participantId) {
+        setErrorMsg('No participant specified.');
+        setStatus('error');
+        return;
+      }
 
-    const all = getParticipants();
+      // Try syncing cloud matches in case admin reshuffled
+      await syncFromCloudToLocal().catch(() => {});
+
+      const all = getParticipants();
     const found = all.find(p => p.id === participantId);
 
     if (!found) {
@@ -81,7 +86,10 @@ export default function MatchPage() {
     setFriend(matchedFriend);
     setStatus('success');
     setTimeout(() => setShowConfetti(true), 300);
-  }, [participantId]);
+  }
+
+  loadMatch();
+}, [participantId]);
 
   const message = useMemo(() => {
     if (!participantId) return '';
