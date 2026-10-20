@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Users, CheckCircle, AlertTriangle, Heart,
-  RefreshCw, LogOut, Calendar, Shuffle, ChevronDown, ChevronUp,
+  RefreshCw, LogOut, Shuffle, ChevronDown, ChevronUp, UserPlus,
 } from 'lucide-react';
 import StatsCard from '../components/admin/StatsCard';
 import ParticipantsTable from '../components/admin/ParticipantsTable';
+import ParticipantModal from '../components/admin/ParticipantModal';
 import CsvImport from '../components/admin/CsvImport';
 import {
   getParticipants,
   saveParticipants,
   clearImportedParticipants,
   isUsingImportedData,
+  addParticipant,
+  updateParticipant,
 } from '../services/participantStorage';
 import {
   getWeeklyMatches,
@@ -35,13 +38,20 @@ export default function AdminDashboardPage() {
   const [showMatchPreview, setShowMatchPreview] = useState(false);
   const [regenError, setRegenError] = useState('');
 
+  // Modal state for Add/Edit Participant
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
+  const [actionSuccess, setActionSuccess] = useState('');
+
   const refresh = useCallback(() => {
     setParticipants(getParticipants());
     setMatches(getWeeklyMatches());
     setUsingImported(isUsingImportedData());
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const eligible = participants.filter(p => !p.incomplete);
   const incomplete = participants.filter(p => p.incomplete);
@@ -52,30 +62,70 @@ export default function AdminDashboardPage() {
     navigate('/admin/login', { replace: true });
   }
 
-  function handleGenerateMatches() {
-    if (!confirmRegen) { setConfirmRegen(true); return; }
+  function handleShuffleMatches() {
+    if (!confirmRegen) {
+      setConfirmRegen(true);
+      return;
+    }
     setRegenError('');
     try {
       clearWeeklyMatches();
-      const pairs = generateMatches(eligible, weekId);
+      // Generate matches with a dynamic random seed so every shuffle produces fresh random pairs
+      const randomSeed = `${Date.now()}-${Math.random()}`;
+      const pairs = generateMatches(eligible, randomSeed);
       saveWeeklyMatches(weekId, pairs);
       refresh();
       setConfirmRegen(false);
+      setActionSuccess('All participants were randomly shuffled and matched with new friends!');
+      setTimeout(() => setActionSuccess(''), 4000);
     } catch (err) {
-      setRegenError(err instanceof Error ? err.message : 'Failed to generate matches.');
+      setRegenError(err instanceof Error ? err.message : 'Failed to shuffle matches.');
     }
+  }
+
+  function handleOpenAdd() {
+    setEditingParticipant(null);
+    setIsModalOpen(true);
+  }
+
+  function handleOpenEdit(p: Participant) {
+    setEditingParticipant(p);
+    setIsModalOpen(true);
+  }
+
+  function handleSaveParticipant(data: {
+    id?: string;
+    firstName: string;
+    lastName: string;
+    year: string;
+    phone: string;
+    adminNote?: string;
+  }) {
+    if (data.id) {
+      updateParticipant(data.id, data);
+      setActionSuccess(`Updated participant "${data.firstName} ${data.lastName}".`);
+    } else {
+      addParticipant(data);
+      setActionSuccess(`Added new participant "${data.firstName} ${data.lastName}".`);
+    }
+    refresh();
+    setTimeout(() => setActionSuccess(''), 4000);
   }
 
   function handleImport(newList: Participant[]) {
     saveParticipants(newList);
     clearWeeklyMatches(); // Invalidate matches when list changes
     refresh();
+    setActionSuccess('Imported new participant list.');
+    setTimeout(() => setActionSuccess(''), 4000);
   }
 
   function handleResetList() {
     clearImportedParticipants();
     clearWeeklyMatches();
     refresh();
+    setActionSuccess('Reset to original participant list.');
+    setTimeout(() => setActionSuccess(''), 4000);
   }
 
   function formatName(p: Participant): string {
@@ -106,6 +156,18 @@ export default function AdminDashboardPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+        {/* Action toast */}
+        {actionSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-sm flex items-center gap-2 shadow-xs"
+          >
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{actionSuccess}</span>
+          </motion.div>
+        )}
+
         {/* Stats */}
         <section>
           <h2 className="text-lg font-bold text-purple-900 mb-4">Overview</h2>
@@ -113,24 +175,34 @@ export default function AdminDashboardPage() {
             <StatsCard label="Total Participants" value={participants.length} icon={Users} accent="purple" />
             <StatsCard label="Ready for Matching" value={eligible.length} icon={CheckCircle} accent="green" />
             <StatsCard label="Incomplete Records" value={incomplete.length} icon={AlertTriangle} accent="amber" />
-            <StatsCard label="Matches This Week" value={matches ? matches.pairs.length / 2 : 0} icon={Heart} accent="pink" />
+            <StatsCard label="Active Match Pairs" value={matches ? matches.pairs.length / 2 : 0} icon={Heart} accent="pink" />
           </div>
         </section>
 
-        {/* Current week */}
+        {/* Match Pairings */}
         <section className="bg-white rounded-2xl border border-purple-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-1">
-            <Calendar className="w-4 h-4 text-purple-500" />
-            <h2 className="font-semibold text-purple-900">Current Week</h2>
+            <Shuffle className="w-4 h-4 text-purple-500" />
+            <h2 className="font-semibold text-purple-900">Match Connections</h2>
           </div>
           <p className="text-purple-400 text-sm mb-4">
-            Week identifier: <span className="font-mono text-purple-700">{weekId}</span>
-            {matches && (
-              <> · Generated: <span className="text-purple-600">{new Date(matches.generatedAt).toLocaleString()}</span></>
+            {matches ? (
+              <>
+                Active matches generated:{' '}
+                <span className="text-purple-600 font-medium">
+                  {new Date(matches.generatedAt).toLocaleString()}
+                </span>
+                {' · '}
+                <span className="text-purple-700 font-mono">
+                  {matches.pairs.length / 2} pairs connected
+                </span>
+              </>
+            ) : (
+              'No matches have been generated yet. Click below to randomly pair participants.'
             )}
           </p>
 
-          {/* Generate / Regen */}
+          {/* Shuffle Matches */}
           <div className="space-y-3">
             {confirmRegen && (
               <motion.div
@@ -138,12 +210,18 @@ export default function AdminDashboardPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"
               >
-                ⚠️ This will replace all current weekly assignments. Participants will be matched with different friends.
+                ⚠️ This will randomly re-shuffle all participant pairings and assign each person a new friend.
                 <div className="flex gap-2 mt-2">
-                  <button onClick={handleGenerateMatches} className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
-                    Yes, Regenerate
+                  <button
+                    onClick={handleShuffleMatches}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    Yes, Shuffle Randomly
                   </button>
-                  <button onClick={() => setConfirmRegen(false)} className="border border-amber-300 text-amber-700 px-3 py-1.5 rounded-lg text-xs">
+                  <button
+                    onClick={() => setConfirmRegen(false)}
+                    className="border border-amber-300 text-amber-700 px-3 py-1.5 rounded-lg text-xs hover:bg-amber-100 transition-colors"
+                  >
                     Cancel
                   </button>
                 </div>
@@ -151,19 +229,23 @@ export default function AdminDashboardPage() {
             )}
 
             {regenError && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{regenError}</p>
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                {regenError}
+              </p>
             )}
 
             <button
-              onClick={handleGenerateMatches}
+              onClick={handleShuffleMatches}
               disabled={eligible.length < 2}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
+              className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all shadow-sm"
             >
               <Shuffle className="w-4 h-4" />
-              {matches ? 'Regenerate Matches' : 'Generate Matches'}
+              {matches ? 'Shuffle Matches Randomly' : 'Generate Matches Randomly'}
             </button>
             {eligible.length < 2 && (
-              <p className="text-xs text-purple-400">Need at least 2 complete participants to generate matches.</p>
+              <p className="text-xs text-purple-400">
+                At least 2 complete participants are needed to perform a match shuffle.
+              </p>
             )}
           </div>
 
@@ -175,7 +257,7 @@ export default function AdminDashboardPage() {
                 className="flex items-center gap-1.5 text-sm text-purple-600 hover:text-purple-800 transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                {showMatchPreview ? 'Hide' : 'Preview'} current matches
+                {showMatchPreview ? 'Hide' : 'Preview'} current pairings
                 {showMatchPreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
               {showMatchPreview && (
@@ -189,7 +271,7 @@ export default function AdminDashboardPage() {
                       <tr>
                         <th className="px-3 py-2 text-left text-purple-700">Participant</th>
                         <th className="px-3 py-2 text-center text-purple-400">→</th>
-                        <th className="px-3 py-2 text-left text-purple-700">Friend</th>
+                        <th className="px-3 py-2 text-left text-purple-700">Matched Friend</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-purple-50 bg-white">
@@ -223,15 +305,26 @@ export default function AdminDashboardPage() {
               <h2 className="font-semibold text-purple-900">Participants</h2>
               {usingImported && (
                 <p className="text-xs text-purple-400 mt-0.5">
-                  Using admin-imported list.{' '}
+                  Using custom participant list.{' '}
                   <button onClick={handleResetList} className="text-purple-600 underline hover:text-purple-800">
-                    Reset to built-in data
+                    Reset to original built-in data
                   </button>
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-colors shadow-xs"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Participant</span>
+            </button>
           </div>
-          <ParticipantsTable participants={participants} />
+          <ParticipantsTable
+            participants={participants}
+            onEdit={handleOpenEdit}
+          />
         </section>
 
         {/* CSV Import */}
@@ -239,7 +332,7 @@ export default function AdminDashboardPage() {
           <h2 className="font-semibold text-purple-900 mb-1">Import / Export</h2>
           <p className="text-xs text-purple-400 mb-4">
             Import a CSV with columns: <span className="font-mono">id, firstName, lastName, year, phone</span>.
-            Importing replaces the current list and clears weekly matches.
+            Importing replaces the current list and resets current matches.
           </p>
           <CsvImport currentParticipants={participants} onImport={handleImport} />
         </section>
@@ -250,6 +343,14 @@ export default function AdminDashboardPage() {
           This is a frontend-only demo and is not a secure system.
         </p>
       </main>
+
+      {/* Add / Edit Participant Modal */}
+      <ParticipantModal
+        isOpen={isModalOpen}
+        participant={editingParticipant}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveParticipant}
+      />
     </div>
   );
 }
