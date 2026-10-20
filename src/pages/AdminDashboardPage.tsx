@@ -9,6 +9,7 @@ import StatsCard from '../components/admin/StatsCard';
 import ParticipantsTable from '../components/admin/ParticipantsTable';
 import ParticipantModal from '../components/admin/ParticipantModal';
 import CsvImport from '../components/admin/CsvImport';
+import CloudSyncSettings from '../components/admin/CloudSyncSettings';
 import {
   getParticipants,
   saveParticipants,
@@ -23,6 +24,7 @@ import {
   clearWeeklyMatches,
   getMatchForParticipant,
 } from '../services/matchingStorage';
+import { pushToCloud } from '../services/jsonbin';
 import { generateMatches } from '../utils/matching';
 import { getCurrentWeekId } from '../utils/week';
 import { STORAGE_KEYS } from '../config/admin';
@@ -73,11 +75,14 @@ export default function AdminDashboardPage() {
       // Generate matches with a dynamic random seed so every shuffle produces fresh random pairs
       const randomSeed = `${Date.now()}-${Math.random()}`;
       const pairs = generateMatches(eligible, randomSeed);
-      saveWeeklyMatches(weekId, pairs);
+      const savedMatches = saveWeeklyMatches(weekId, pairs);
       refresh();
       setConfirmRegen(false);
       setActionSuccess('All participants were randomly shuffled and matched with new friends!');
       setTimeout(() => setActionSuccess(''), 4000);
+
+      // Auto-sync to JSONBin if connected
+      pushToCloud(eligible, savedMatches).catch(() => {});
     } catch (err) {
       setRegenError(err instanceof Error ? err.message : 'Failed to shuffle matches.');
     }
@@ -110,6 +115,9 @@ export default function AdminDashboardPage() {
     }
     refresh();
     setTimeout(() => setActionSuccess(''), 4000);
+
+    // Auto-sync to JSONBin if connected
+    pushToCloud(getParticipants(), getWeeklyMatches()).catch(() => {});
   }
 
   function handleImport(newList: Participant[]) {
@@ -118,6 +126,9 @@ export default function AdminDashboardPage() {
     refresh();
     setActionSuccess('Imported new participant list.');
     setTimeout(() => setActionSuccess(''), 4000);
+
+    // Auto-sync to JSONBin if connected
+    pushToCloud(newList, null).catch(() => {});
   }
 
   function handleResetList() {
@@ -326,6 +337,9 @@ export default function AdminDashboardPage() {
             onEdit={handleOpenEdit}
           />
         </section>
+
+        {/* Live Cloud Sync (JSONBin) */}
+        <CloudSyncSettings onSyncComplete={refresh} />
 
         {/* CSV Import */}
         <section className="bg-white rounded-2xl border border-purple-100 shadow-sm p-5">
