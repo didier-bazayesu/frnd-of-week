@@ -39,12 +39,13 @@ function seededShuffle<T>(array: T[], seed: string): T[] {
  * Throws if fewer than 2 participants are supplied or if a self-match
  * would occur (should never happen with a valid unique list).
  */
-export function generateMatches(participants: Participant[], weekId: string): MatchPair[] {
+export function generateMatches(participants: Participant[], seed?: string): MatchPair[] {
   if (participants.length < 2) {
     throw new Error('At least 2 eligible participants are required to generate matches.');
   }
 
-  const shuffled = seededShuffle(participants, weekId);
+  const shuffleSeed = seed ?? (Date.now().toString() + '-' + Math.random().toString());
+  const shuffled = seededShuffle(participants, shuffleSeed);
   const pairs: MatchPair[] = [];
 
   if (shuffled.length % 2 === 0) {
