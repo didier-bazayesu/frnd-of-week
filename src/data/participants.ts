@@ -138,8 +138,7 @@ export const participants: Participant[] = [
     lastName: "Modesta",
     year: "Y3",
     phone: "0782886952",
-    adminNote:
-      "Phone number '782886952' has only 9 digits. A leading '0' may be missing. Please verify and correct.",
+    
   } as Participant),
   flag({
     id: "p19",
