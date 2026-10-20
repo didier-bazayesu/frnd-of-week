@@ -1,6 +1,7 @@
 import type { Participant } from '../types/participant';
 import type { WeeklyMatches } from '../types/matching';
 import { STORAGE_KEYS } from '../config/admin';
+import { JSONBIN_CONFIG } from '../config/jsonbin';
 
 export interface JsonBinConfig {
   binId: string;
@@ -16,7 +17,7 @@ export interface CloudPayload {
 const JSONBIN_CONFIG_KEY = 'fotw_jsonbin_config';
 
 /**
- * Returns active JSONBin credentials from localStorage or Vite environment variables.
+ * Returns active JSONBin credentials from localStorage or fallback application Config.
  */
 export function getJsonBinConfig(): JsonBinConfig | null {
   try {
@@ -31,13 +32,11 @@ export function getJsonBinConfig(): JsonBinConfig | null {
     // Ignore parse error
   }
 
-  const envBinId = import.meta.env.VITE_JSONBIN_BIN_ID;
-  const envApiKey = import.meta.env.VITE_JSONBIN_API_KEY;
-
-  if (envBinId && envApiKey) {
+  // Fallback to application Config
+  if (JSONBIN_CONFIG.binId && JSONBIN_CONFIG.apiKey) {
     return {
-      binId: envBinId,
-      apiKey: envApiKey,
+      binId: JSONBIN_CONFIG.binId,
+      apiKey: JSONBIN_CONFIG.apiKey,
     };
   }
 
